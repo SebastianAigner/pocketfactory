@@ -20,5 +20,3 @@ import org.jetbrains.compose.resources.painterResource
 fun App() {
     FactoryGame()
 }
-
-expect fun getPlatformName(): String
