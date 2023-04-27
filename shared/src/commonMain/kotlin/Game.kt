@@ -1,7 +1,9 @@
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlin.random.Random
 import kotlin.time.Duration.Companion.seconds
 
 class Game {
@@ -43,17 +45,49 @@ data class Vec2(val x: Int, val y: Int) {
     operator fun plus(other: Vec2) = Vec2(x + other.x, y + other.y)
 }
 
+enum class SelectedTool {
+    CONVEYOR,
+    SPAWNER,
+    CONSUMER,
+    BOX
+}
+
 class Board {
+    private val _selectedTool = MutableStateFlow(SelectedTool.CONVEYOR)
+    val selectedTool: StateFlow<SelectedTool> get() = _selectedTool.asStateFlow()
+    fun selectTool(t: SelectedTool) {
+        _selectedTool.update { t }
+    }
+
+    fun useTool(x: Int, y: Int) {
+        val tool = _selectedTool.value
+        when(tool) {
+            SelectedTool.CONVEYOR -> {
+                val c = Conveyor(scope, Direction.UP, this)
+                place(c, Vec2(x, y))
+                c.run()
+            }
+            SelectedTool.CONSUMER -> {}
+            SelectedTool.SPAWNER -> {}
+            SelectedTool.BOX -> {
+                findConveyorAt(Vec2(x, y))?.let {
+                    scope.launch {
+                        it.accept(Item(Random.nextInt()))
+                    }
+                }
+            }
+        }
+    }
+
     private val _conveyors = MutableStateFlow<Map<Vec2, Conveyor>>(emptyMap())
-    val conveyors: StateFlow<Map<Vec2,Conveyor>> get() = _conveyors
+    val conveyors: StateFlow<Map<Vec2, Conveyor>> get() = _conveyors
     val scope = CoroutineScope(Dispatchers.Default /*+ SupervisorJob()*/)
 
     fun modifyCell(x: Int, y: Int) {
-        findConveyorAt(Vec2(x,y))?.let {
+        findConveyorAt(Vec2(x, y))?.let {
             it.rotate()
             println("Now facing ${it.direction}")
-        } ?:
-        run {
+        } ?: run {
             val conveyor = Conveyor(scope, Direction.UP, this)
             place(conveyor, Vec2(x, y))
             conveyor.run()
@@ -74,7 +108,7 @@ class Board {
         while (true) {
             val newConveyor = findConveyorAt(newCoord)
             if (newConveyor != null) {
-                println("Item $item emitted from $from into $into ($newCoord) (conveyor $newConveyor)")
+//                println("Item $item emitted from $from into $into ($newCoord) (conveyor $newConveyor)")
                 newConveyor.accept(item)
                 return
             } else {
@@ -89,6 +123,12 @@ class Board {
             it + (at to c)
         }
     }
+
+
+    suspend fun addItem(j: Int, i: Int, item: Item) {
+        val conveyor = findConveyorAt(Vec2(j, i))
+        conveyor?.accept(item)
+    }
 }
 
 class Item(val id: Int)
@@ -101,11 +141,12 @@ class Conveyor(val scope: CoroutineScope, direction: Direction, val board: Board
             it.rotate()
         }
     }
+
     private val _direction = MutableStateFlow<Direction>(direction)
-    val direction: StateFlow<Direction> get() = _direction
+    val direction: StateFlow<Direction> = _direction.asStateFlow()
 
     private val _itemsOnBelt = MutableStateFlow<List<ItemProgress>>(emptyList())
-    val itemsOnBelt: StateFlow<List<ItemProgress>> get() = _itemsOnBelt
+    val itemsOnBelt: StateFlow<List<ItemProgress>> = _itemsOnBelt.asStateFlow()
 
     suspend fun accept(item: Item) {
         _itemsOnBelt.update {

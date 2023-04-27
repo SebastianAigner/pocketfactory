@@ -1,18 +1,22 @@
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.Button
 import androidx.compose.material.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role.Companion.Button
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 @Composable
 fun GridCell(x: Int, y: Int, color: Color = Color.Black) {
@@ -102,46 +106,91 @@ fun GridLayer(cell: @Composable (i: Int, j: Int) -> Unit) {
 @Composable
 fun FactoryGame() {
     val conveyors = board.conveyors.collectAsState()
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         startGame()
     }
-    Box {
-        GridLayer(cell = { i, j ->
-            GridCell(j, i, Color.Black)
-        })
-        GridLayer(cell = { i, j ->
-            conveyors.value[Vec2(j, i)]?.let {
-                Box {
-                    ConveyorCell(j, i, it)
-                }
-            } ?: GridCell(j, i, Color.Transparent)
-        })
-        GridLayer(cell = { i, j ->
-            conveyors.value[Vec2(j, i)]?.let {
-                Box {
-                    GridCell(j, i, Color.Transparent)
-                    ConveyorItems(it)
-                }
-            } ?: GridCell(j, i, Color.Transparent)
-        })
-        GridLayer(cell = { i, j ->
-            ClickableCell(j, i, onClick = {
-                board.modifyCell(j, i)
+    Column {
+        Box {
+            GridLayer(cell = { i, j ->
+                GridCell(j, i, Color.Black)
             })
-        })
+            GridLayer(cell = { i, j ->
+                conveyors.value[Vec2(j, i)]?.let {
+                    Box {
+                        ConveyorCell(j, i, it)
+                    }
+                } ?: GridCell(j, i, Color.Transparent)
+            })
+            GridLayer(cell = { i, j ->
+                conveyors.value[Vec2(j, i)]?.let {
+                    Box {
+                        GridCell(j, i, Color.Transparent)
+                        ConveyorItems(it)
+                    }
+                } ?: GridCell(j, i, Color.Transparent)
+            })
+            GridLayer(cell = { i, j ->
+                ClickableCell(j, i, onClick = {
+                    board.modifyCell(j, i)
+                }, onLongClick = {
+//                    scope.launch {
+//                        board.addItem(j, i, Item(Random.nextInt()))
+//                    }
+                    board.useTool(j, i)
+                })
+            })
+        }
+        MenuBar(board)
+        val tool = board.selectedTool.collectAsState()
+        Text("Selected tool: ${tool.value}")
     }
 }
 
+
 @Composable
-fun ClickableCell(x: Int, y: Int, onClick: () -> Unit) {
+fun MenuBar(board: Board) {
+    Row {
+        Button(onClick = {
+            board.selectTool(SelectedTool.CONVEYOR)
+        }) {
+            Text("Conveyor")
+        }
+        Button(onClick = {
+            board.selectTool(SelectedTool.SPAWNER)
+        }) {
+            Text("Spawner")
+        }
+        Button(onClick = {
+            board.selectTool(SelectedTool.CONSUMER)
+        }) {
+            Text("Consumer")
+        }
+        Button(onClick = {
+            board.selectTool(SelectedTool.BOX)
+        }) {
+            Text("Box")
+        }
+    }
+}
+
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ClickableCell(x: Int, y: Int, onClick: () -> Unit, onLongClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .clickable {
-                println("Clicked $x, $y")
-                onClick()
-            }
+            .combinedClickable(
+                onClick = {
+                    println("Clicked $x, $y")
+                    onClick()
+                },
+                onLongClick = {
+                    onLongClick()
+                })
             .size(32.dp)
             .background(Color.Transparent)
             .border(1.dp, Color.White)
-    )
+    ) {
+    }
 }
